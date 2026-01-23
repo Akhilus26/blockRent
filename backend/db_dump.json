@@ -1,0 +1,143 @@
+{
+  "requests": [
+    {
+      "id": "b99b0bfb-e596-4c5f-ab88-2ddc3ec322b2",
+      "status": "accepted",
+      "tenantId": "034de881-2819-4a57-b842-ff53211add80",
+      "propertyId": "9131b6eb-896e-46a8-ad98-dc647fd6ad14",
+      "propertyTitle": "ramana",
+      "finalRent": 23,
+      "proposedRent": 23,
+      "originalRent": 23,
+      "counterRent": null,
+      "landlordId": "eb290a15-a4f6-4f08-b83e-09f707d4102f"
+    },
+    {
+      "id": "7fd55c9e-95d3-4ac3-912b-37f9c7ece8d6",
+      "status": "accepted",
+      "tenantId": "034de881-2819-4a57-b842-ff53211add80",
+      "propertyId": "9131b6eb-896e-46a8-ad98-dc647fd6ad14",
+      "propertyTitle": "ramana",
+      "finalRent": 20,
+      "proposedRent": 20,
+      "originalRent": 23,
+      "counterRent": null,
+      "landlordId": "eb290a15-a4f6-4f08-b83e-09f707d4102f"
+    },
+    {
+      "id": "7463d31f-669f-4a25-9037-cfa278928b29",
+      "status": "accepted",
+      "tenantId": "034de881-2819-4a57-b842-ff53211add80",
+      "propertyId": "9131b6eb-896e-46a8-ad98-dc647fd6ad14",
+      "propertyTitle": "ramana",
+      "finalRent": 21,
+      "proposedRent": 21,
+      "originalRent": 23,
+      "counterRent": null,
+      "landlordId": "eb290a15-a4f6-4f08-b83e-09f707d4102f"
+    },
+    {
+      "id": "b3a87780-74ab-4096-bb80-d6f40a32a208",
+      "status": "rejected",
+      "tenantId": "034de881-2819-4a57-b842-ff53211add80",
+      "propertyId": "9131b6eb-896e-46a8-ad98-dc647fd6ad14",
+      "propertyTitle": "ramana",
+      "finalRent": null,
+      "proposedRent": 23,
+      "originalRent": 23,
+      "counterRent": null,
+      "landlordId": "eb290a15-a4f6-4f08-b83e-09f707d4102f"
+    },
+    {
+      "id": "c171fe08-d4ec-418c-a445-3e4975a4a693",
+      "status": "accepted",
+      "tenantId": "034de881-2819-4a57-b842-ff53211add80",
+      "propertyId": "9131b6eb-896e-46a8-ad98-dc647fd6ad14",
+      "propertyTitle": "ramana",
+      "finalRent": 20,
+      "proposedRent": 19,
+      "originalRent": 23,
+      "counterRent": 20,
+      "landlordId": "eb290a15-a4f6-4f08-b83e-09f707d4102f"
+    },
+    {
+      "id": "2d5f5c26-4dbe-49c1-8371-47330b9cd451",
+      "status": "accepted",
+      "tenantId": "034de881-2819-4a57-b842-ff53211add80",
+      "propertyId": "9131b6eb-896e-46a8-ad98-dc647fd6ad14",
+      "propertyTitle": "ramana",
+      "finalRent": 23,
+      "proposedRent": 23,
+      "originalRent": 23,
+      "counterRent": null,
+      "landlordId": "eb290a15-a4f6-4f08-b83e-09f707d4102f"
+    },
+    {
+      "id": "469dbdd8-aff1-46ef-aeeb-4797db326bc0",
+      "status": "accepted",
+      "tenantId": "034de881-2819-4a57-b842-ff53211add80",
+      "propertyId": "9131b6eb-896e-46a8-ad98-dc647fd6ad14",
+      "propertyTitle": "ramana",
+      "finalRent": 23,
+      "proposedRent": 23,
+      "originalRent": 23,
+      "counterRent": null,
+      "landlordId": "eb290a15-a4f6-4f08-b83e-09f707d4102f"
+    },
+    {
+      "id": "5662bf78-2d98-48f5-8f72-ba895c45c7d9",
+      "status": "rejected",
+      "tenantId": "034de881-2819-4a57-b842-ff53211add80",
+      "propertyId": "9131b6eb-896e-46a8-ad98-dc647fd6ad14",
+      "propertyTitle": "ramana",
+      "finalRent": null,
+      "proposedRent": 23,
+      "originalRent": 23,
+      "counterRent": null,
+      "landlordId": "eb290a15-a4f6-4f08-b83e-09f707d4102f"
+    },
+    {
+      "id": "167eefd7-805f-45c6-b127-3e1a71c907ba",
+      "status": "accepted",
+      "tenantId": "034de881-2819-4a57-b842-ff53211add80",
+      "propertyId": "9131b6eb-896e-46a8-ad98-dc647fd6ad14",
+      "propertyTitle": "ramana",
+      "finalRent": 22,
+      "proposedRent": 20,
+      "originalRent": 23,
+      "counterRent": 22,
+      "landlordId": "eb290a15-a4f6-4f08-b83e-09f707d4102f"
+    },
+    {
+      "id": "a27509ac-67f1-457c-9e15-03eab1f7d454",
+      "status": "accepted",
+      "tenantId": "034de881-2819-4a57-b842-ff53211add80",
+      "propertyId": "9131b6eb-896e-46a8-ad98-dc647fd6ad14",
+      "propertyTitle": "ramana",
+      "finalRent": 21,
+      "proposedRent": 19,
+      "originalRent": 23,
+      "counterRent": 21,
+      "landlordId": "eb290a15-a4f6-4f08-b83e-09f707d4102f"
+    },
+    {
+      "id": "c2db5c2c-32ed-420e-95f3-0206d8f2ff38",
+      "status": "accepted",
+      "tenantId": "034de881-2819-4a57-b842-ff53211add80",
+      "propertyId": "9131b6eb-896e-46a8-ad98-dc647fd6ad14",
+      "propertyTitle": "ramana",
+      "finalRent": 23,
+      "proposedRent": 23,
+      "originalRent": 23,
+      "counterRent": null,
+      "landlordId": "eb290a15-a4f6-4f08-b83e-09f707d4102f"
+    }
+  ],
+  "agreements": [
+    {
+      "id": "23776eeb-f5a1-47db-8907-1400108ee28c",
+      "tenantId": "034de881-2819-4a57-b842-ff53211add80",
+      "propertyId": "9131b6eb-896e-46a8-ad98-dc647fd6ad14"
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+--- Agreements Schema ---
+CREATE TABLE agreements (
+      id TEXT PRIMARY KEY,
+      propertyId TEXT NOT NULL,
+      propertyTitle TEXT NOT NULL,
+      tenantId TEXT NOT NULL,
+      tenantName TEXT NOT NULL,
+      landlordId TEXT NOT NULL,
+      landlordName TEXT NOT NULL,
+      finalRent REAL NOT NULL,
+      startDate TEXT NOT NULL,
+      endDate TEXT NOT NULL,
+      blockchainHash TEXT NOT NULL,
+      blockchainTimestamp TEXT NOT NULL,
+      pdfPath TEXT,
+      status TEXT NOT NULL DEFAULT 'finalized',
+      createdAt TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (propertyId) REFERENCES properties(id),
+      FOREIGN KEY (tenantId) REFERENCES users(id),
+      FOREIGN KEY (landlordId) REFERENCES users(id)
+    )
+
+--- Agreements Data ---
+[
+  {
+    "id": "23776eeb-f5a1-47db-8907-1400108ee28c",
+    "finalRent": 23,
+    "pdfPath": "/uploads/agreement_23776eeb-f5a1-47db-8907-1400108ee28c.pdf"
+  }
+]
