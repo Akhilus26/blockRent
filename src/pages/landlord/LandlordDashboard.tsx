@@ -179,7 +179,25 @@ const LandlordDashboard = () => {
                         />
                       </div>
                       <div className="p-4">
-                        <h3 className="font-semibold line-clamp-1">{property.title}</h3>
+                        <div className="flex items-center justify-between gap-2 mb-1.5">
+                          <h3 className="font-semibold line-clamp-1">{property.title}</h3>
+                          <span
+                            className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                              property.status === 'approved'
+                                ? 'bg-success/15 text-success border border-success/30'
+                                : property.status === 'rejected'
+                                  ? 'bg-destructive/15 text-destructive border border-destructive/30'
+                                  : 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30'
+                            }`}
+                          >
+                            {property.status === 'approved'
+                              ? 'Approved'
+                              : property.status === 'rejected'
+                                ? 'Rejected'
+                                : 'Pending Review'}
+                          </span>
+                        </div>
+
                         <p className="text-sm text-muted-foreground line-clamp-1">
                           {property.location}
                         </p>
@@ -188,6 +206,11 @@ const LandlordDashboard = () => {
                         </p>
                         {property.availability === 'rented' && (
                           <p className="mt-1 text-xs text-warning font-medium">Rented Out</p>
+                        )}
+                        {property.status === 'rejected' && property.rejectionReason && (
+                          <div className="mt-2 p-2 rounded bg-destructive/10 border border-destructive/20 text-xs text-destructive">
+                            <strong>Admin Feedback:</strong> {property.rejectionReason}
+                          </div>
                         )}
                         <div className="mt-3 flex gap-2">
                           {property.availability === 'rented' ? (

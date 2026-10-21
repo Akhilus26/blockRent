@@ -79,6 +79,15 @@ const PropertyDetail = () => {
       return;
     }
 
+    if (user.verificationStatus !== "verified") {
+      toast({
+        title: "Verification Required",
+        description: `Your tenant identity verification status is ${user.verificationStatus || 'pending'}. Only verified tenants can submit rental requests.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (!property) return;
 
     // Open dialog for negotiation form
@@ -334,11 +343,17 @@ const PropertyDetail = () => {
                       </p>
                     </div>
 
+                    {user?.role === 'tenant' && user.verificationStatus !== 'verified' && (
+                      <div className="mb-4 rounded-lg bg-amber-500/10 border border-amber-500/30 p-3 text-xs text-amber-800 dark:text-amber-300">
+                        <strong>Verification Required:</strong> Your tenant verification status is <em>{user.verificationStatus || 'pending review'}</em>. Submitting rental requests requires administrator verification.
+                      </div>
+                    )}
+
                     <Button
                       className="w-full bg-gradient-primary hover:opacity-90 mb-4"
                       size="lg"
                       onClick={handleRequest}
-                      disabled={isSubmitting || property.availability === 'rented'}
+                      disabled={isSubmitting || property.availability === 'rented' || (user?.role === 'tenant' && user.verificationStatus !== 'verified')}
                     >
                       {isSubmitting ? (
                         <>
@@ -347,6 +362,8 @@ const PropertyDetail = () => {
                         </>
                       ) : property.availability === 'rented' ? (
                         "Rented Out"
+                      ) : user?.role === 'tenant' && user.verificationStatus !== 'verified' ? (
+                        "Identity Verification Required"
                       ) : (
                         "Send Rental Request"
                       )}

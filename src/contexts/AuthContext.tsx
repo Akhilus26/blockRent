@@ -8,21 +8,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  const refreshUser = async () => {
+    try {
+      const { user: updatedUser } = await authAPI.getProfile();
+      setUser(updatedUser);
+      localStorage.setItem('blockrent_user', JSON.stringify(updatedUser));
+    } catch (error) {
+      console.error('Error refreshing user profile:', error);
+    }
+  };
+
   useEffect(() => {
-    // Check for stored user on mount
+    // Check for stored user on mount and refresh with backend
     const storedUser = localStorage.getItem('blockrent_user');
     if (storedUser) {
       try {
         const parsedUser = JSON.parse(storedUser);
         setUser(parsedUser);
-        // Optionally verify with backend
-        // authAPI.getProfile().then(({ user }) => {
-        //   setUser(user);
-        //   localStorage.setItem('blockrent_user', JSON.stringify(user));
-        // }).catch(() => {
-        //   localStorage.removeItem('blockrent_user');
-        //   setUser(null);
-        // });
+        // Refresh with backend to get latest verificationStatus
+        authAPI.getProfile().then(({ user }) => {
+          setUser(user);
+          localStorage.setItem('blockrent_user', JSON.stringify(user));
+        }).catch(() => {
+          // Keep stored user if offline or ignore
+        });
       } catch (error) {
         console.error('Error parsing stored user:', error);
         localStorage.removeItem('blockrent_user');
@@ -46,7 +55,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const register = async (data: RegisterData) => {
+  const register = async (data: RegisterData | FormData) => {
     setIsLoading(true);
     try {
       const { user } = await authAPI.register(data);
@@ -66,7 +75,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, register, logout, isLoading }}>
+    <AuthContext.Provider value={{ user, login, register, logout, isLoading, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

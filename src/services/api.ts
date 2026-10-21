@@ -34,8 +34,20 @@ export const authAPI = {
     return response.data;
   },
 
-  register: async (data: RegisterData): Promise<{ user: User }> => {
-    const response = await api.post('/auth/register', data);
+  register: async (data: RegisterData | FormData): Promise<{ user: User; message: string }> => {
+    const isFormData = data instanceof FormData;
+    const response = await api.post('/auth/register', data, {
+      headers: isFormData ? { 'Content-Type': 'multipart/form-data' } : undefined,
+    });
+    return response.data;
+  },
+
+  resubmitIdentity: async (formData: FormData): Promise<{ user: User; message: string }> => {
+    const response = await api.post('/auth/resubmit-identity', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
     return response.data;
   },
 
@@ -73,12 +85,12 @@ export const propertyAPI = {
     return response.data;
   },
 
-  create: async (propertyData: Partial<Property>): Promise<{ property: Property }> => {
+  create: async (propertyData: Partial<Property>): Promise<{ property: Property; message: string }> => {
     const response = await api.post('/properties', propertyData);
     return response.data;
   },
 
-  update: async (id: string, propertyData: Partial<Property>): Promise<{ property: Property }> => {
+  update: async (id: string, propertyData: Partial<Property>): Promise<{ property: Property; message: string }> => {
     const response = await api.put(`/properties/${id}`, propertyData);
     return response.data;
   },
@@ -100,6 +112,18 @@ export const propertyAPI = {
     });
 
     const response = await api.post('/properties/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
+
+  uploadOwnership: async (file: File): Promise<{ ownershipDocument: string; ownershipDocumentName: string; message: string }> => {
+    const formData = new FormData();
+    formData.append('ownershipDocument', file);
+
+    const response = await api.post('/properties/upload-ownership', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
@@ -191,24 +215,69 @@ export const adminAPI = {
     return response.data;
   },
 
-  approveUser: async (id: string): Promise<{ user: User }> => {
+  approveUser: async (id: string): Promise<{ user: User; message: string }> => {
     const response = await api.patch(`/admin/users/${id}/approve`);
     return response.data;
   },
 
-  rejectUser: async (id: string): Promise<{ user: User }> => {
-    const response = await api.patch(`/admin/users/${id}/reject`);
+  rejectUser: async (id: string, rejectionReason: string): Promise<{ user: User; message: string }> => {
+    const response = await api.patch(`/admin/users/${id}/reject`, { rejectionReason });
     return response.data;
+  },
+
+  getProperties: async (status?: string): Promise<{ properties: Property[] }> => {
+    const params = status ? { status } : {};
+    const response = await api.get('/admin/properties', { params });
+    return response.data;
+  },
+
+  approveProperty: async (id: string): Promise<{ property: Property; message: string }> => {
+    const response = await api.patch(`/admin/properties/${id}/approve`);
+    return response.data;
+  },
+
+  rejectProperty: async (id: string, rejectionReason: string): Promise<{ property: Property; message: string }> => {
+    const response = await api.patch(`/admin/properties/${id}/reject`, { rejectionReason });
+    return response.data;
+  },
+
+  viewIdentityDocument: async (userId: string): Promise<{ url: string; mimeType: string }> => {
+    const response = await api.get(`/admin/documents/identity/${userId}`, {
+      responseType: 'blob',
+    });
+    const headerType = response.headers?.['content-type'] || (typeof response.headers?.get === 'function' ? response.headers.get('content-type') : null);
+    const mimeType = (headerType && headerType.split(';')[0].trim()) || response.data?.type || 'application/pdf';
+    const blob = new Blob([response.data], { type: mimeType });
+    return {
+      url: URL.createObjectURL(blob),
+      mimeType,
+    };
+  },
+
+  viewOwnershipDocument: async (propertyId: string): Promise<{ url: string; mimeType: string }> => {
+    const response = await api.get(`/admin/documents/ownership/${propertyId}`, {
+      responseType: 'blob',
+    });
+    const headerType = response.headers?.['content-type'] || (typeof response.headers?.get === 'function' ? response.headers.get('content-type') : null);
+    const mimeType = (headerType && headerType.split(';')[0].trim()) || response.data?.type || 'application/pdf';
+    const blob = new Blob([response.data], { type: mimeType });
+    return {
+      url: URL.createObjectURL(blob),
+      mimeType,
+    };
   },
 
   getStats: async (): Promise<{
     stats: {
       totalUsers: number;
       pendingUsers: number;
-      approvedUsers: number;
+      pendingTenants: number;
+      verifiedTenants: number;
       totalProperties: number;
       pendingProperties: number;
+      approvedProperties: number;
       totalAgreements: number;
+      rentedProperties: number;
     };
   }> => {
     const response = await api.get('/admin/stats');

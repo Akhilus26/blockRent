@@ -1,10 +1,10 @@
 import express from 'express';
 import db from '../database.js';
 import crypto from 'crypto';
-import PDFDocument from 'pdfkit';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { mkdirSync, existsSync, createWriteStream } from 'fs';
+import { mkdirSync, existsSync } from 'fs';
+import { generateProfessionalAgreementPDF } from '../utils/pdfGenerator.js';
 
 const router = express.Router();
 
@@ -30,37 +30,7 @@ function generateBlockchainHash(agreementData) {
 
 // Generate PDF agreement
 function generateAgreementPDF(agreement) {
-  return new Promise((resolve, reject) => {
-    const doc = new PDFDocument();
-    const filename = `agreement_${agreement.id}.pdf`;
-    const filepath = join(uploadsDir, filename);
-
-    const stream = createWriteStream(filepath);
-    doc.pipe(stream);
-
-    // PDF content
-    doc.fontSize(20).text('Rental Agreement', { align: 'center' });
-    doc.moveDown();
-    doc.fontSize(12);
-    doc.text(`Agreement ID: ${agreement.id}`);
-    doc.text(`Property: ${agreement.propertyTitle}`);
-    doc.text(`Tenant: ${agreement.tenantName}`);
-    doc.text(`Landlord: ${agreement.landlordName}`);
-    doc.moveDown();
-    doc.text(`Monthly Rent: ₹${agreement.finalRent.toLocaleString()}`);
-    doc.text(`Start Date: ${new Date(agreement.startDate).toLocaleDateString()}`);
-    doc.text(`End Date: ${new Date(agreement.endDate).toLocaleDateString()}`);
-    doc.moveDown();
-    doc.text(`Blockchain Hash: ${agreement.blockchainHash}`);
-    doc.text(`Timestamp: ${new Date(agreement.blockchainTimestamp).toLocaleString()}`);
-    doc.moveDown();
-    doc.text('This agreement has been finalized and stored on the blockchain.');
-    doc.text('The hash above serves as proof of the agreement\'s integrity.');
-
-    doc.end();
-    stream.on('finish', () => resolve(filename));
-    stream.on('error', reject);
-  });
+  return generateProfessionalAgreementPDF(agreement, uploadsDir);
 }
 
 // POST /api/agreements/finalize
@@ -90,9 +60,13 @@ router.post('/finalize', async (req, res) => {
     }
 
     // Check if user is tenant or landlord
-    const user = db.prepare('SELECT role, name FROM users WHERE id = ?').get(userId);
+    const user = db.prepare('SELECT role, name, verificationStatus FROM users WHERE id = ?').get(userId);
     if (!user || (user.role !== 'tenant' && user.role !== 'landlord')) {
       return res.status(403).json({ error: 'Only tenant or landlord can finalize agreements' });
+    }
+
+    if (user.role === 'tenant' && user.verificationStatus !== 'verified') {
+      return res.status(403).json({ error: 'Tenant identity verification required before finalizing agreements' });
     }
 
     // Get landlord info
@@ -128,15 +102,25 @@ router.post('/finalize', async (req, res) => {
 
     const blockchainHash = generateBlockchainHash(agreementData);
 
+    // Look up contact and location info for professional PDF
+    const tenantUser = db.prepare('SELECT email, phone FROM users WHERE id = ?').get(request.tenantId);
+    const landlordUser = db.prepare('SELECT email, phone FROM users WHERE id = ?').get(request.landlordId);
+    const propDetails = db.prepare('SELECT location, district FROM properties WHERE id = ?').get(request.propertyId);
+
     // Generate PDF
     const agreement = {
       id: agreementId,
       propertyId: request.propertyId,
       propertyTitle: request.propertyTitle,
+      propertyLocation: propDetails ? [propDetails.location, propDetails.district].filter(Boolean).join(', ') : '',
       tenantId: request.tenantId,
       tenantName: request.tenantName,
+      tenantEmail: tenantUser?.email,
+      tenantPhone: tenantUser?.phone,
       landlordId: request.landlordId,
       landlordName: landlord.name,
+      landlordEmail: landlordUser?.email,
+      landlordPhone: landlordUser?.phone,
       finalRent,
       startDate,
       endDate,

@@ -41,9 +41,7 @@ const Profile = () => {
         phone: editPhone
       });
 
-      // Update local storage/context (hacky way since Context doesn't expose underlying setUser easily without reload or re-login)
-      // For this demo, we'll try to re-login or just update the object if possible. 
-      // Actually, useAuth usually reads from localStorage on mount. 
+      // Update local storage and reload so context reflects changes.
       // Let's update localStorage manually so refresh works, and if possible trigger a reload.
       const stored = JSON.parse(localStorage.getItem('user') || '{}');
       const newStored = { ...stored, ...updatedUser };

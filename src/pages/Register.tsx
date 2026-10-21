@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { UserRole } from "@/types";
@@ -7,10 +7,32 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { BackButton } from "@/components/ui/back-button";
-import { Building2, Mail, Lock, User, Phone, ArrowRight, Loader2, Home, Users } from "lucide-react";
+import {
+  Building2,
+  Mail,
+  Lock,
+  User,
+  Phone,
+  ArrowRight,
+  Loader2,
+  Home,
+  Users,
+  Upload,
+  FileText,
+  ShieldCheck,
+  AlertCircle
+} from "lucide-react";
 import { motion } from "framer-motion";
 import { useToast } from "@/hooks/use-toast";
+
+const DOCUMENT_TYPES = [
+  "Aadhaar Card",
+  "PAN Card",
+  "Voter ID",
+  "Passport"
+];
 
 const Register = () => {
   const [name, setName] = useState("");
@@ -18,30 +40,90 @@ const Register = () => {
   const [password, setPassword] = useState("");
   const [phone, setPhone] = useState("");
   const [role, setRole] = useState<UserRole>("tenant");
+  const [identityDocumentType, setIdentityDocumentType] = useState("Aadhaar Card");
+  const [identityDocumentFile, setIdentityDocumentFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const [isLoading, setIsLoading] = useState(false);
   const { register, user } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate size (5MB max)
+    if (file.size > 5 * 1024 * 1024) {
+      toast({
+        title: "File too large",
+        description: "Identity documents must be under 5 MB in size.",
+        variant: "destructive",
+      });
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+
+    // Validate extension
+    const allowed = /\.(pdf|jpg|jpeg|png)$/i;
+    if (!allowed.test(file.name)) {
+      toast({
+        title: "Invalid file format",
+        description: "Only PDF, JPEG, and PNG files are allowed.",
+        variant: "destructive",
+      });
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+
+    setIdentityDocumentFile(file);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (role === "tenant" && !identityDocumentFile) {
+      toast({
+        title: "Document Required",
+        description: "Please upload an identity document for tenant verification.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsLoading(true);
 
     try {
-      await register({ name, email, password, role, phone });
-      
+      if (role === "tenant" && identityDocumentFile) {
+        const formData = new FormData();
+        formData.append("name", name);
+        formData.append("email", email);
+        formData.append("password", password);
+        formData.append("role", role);
+        if (phone) formData.append("phone", phone);
+        formData.append("identityDocumentType", identityDocumentType);
+        formData.append("identityDocument", identityDocumentFile);
+
+        await register(formData);
+      } else {
+        await register({ name, email, password, role, phone });
+      }
+
       // Reset form
       setName("");
       setEmail("");
       setPassword("");
       setPhone("");
+      setIdentityDocumentFile(null);
       setRole("tenant");
-      
+
       toast({
         title: "Account created!",
-        description: "Your account is pending approval. Please login to continue.",
+        description: role === "tenant"
+          ? "Registration successful! Your identity document is pending admin approval."
+          : "Registration successful! Please login to continue.",
       });
-      
+
       // Redirect to login page
       navigate("/login");
     } catch (error: any) {
@@ -65,7 +147,7 @@ const Register = () => {
       {/* Left Panel - Branding */}
       <div className="hidden lg:flex lg:w-1/2 bg-gradient-hero relative overflow-hidden">
         <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4wMyI+PHBhdGggZD0iTTM2IDM0djItSDI0di0yaDEyem0wLTRoLTEydi0yaC0ydjZoMTZ2LTZoLTJ2MnptLTEyLTZoMTJ2MkgyNHYtMnoiLz48L2c+PC9nPjwvc3ZnPg==')] opacity-50" />
-        
+
         <div className="relative z-10 flex flex-col justify-center p-12">
           <Link to="/" className="flex items-center gap-3 mb-12">
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/20 backdrop-blur-sm">
@@ -83,28 +165,28 @@ const Register = () => {
               Join BlockRent
             </h1>
             <p className="text-primary-foreground/70 text-lg max-w-md">
-              Create your account and experience the future of property rentals with blockchain-secured agreements.
+              Create your account with secure identity and property verification, powered by blockchain integrity.
             </p>
           </motion.div>
 
           <div className="mt-12 space-y-4">
             <div className="flex items-center gap-3 text-primary-foreground/80">
               <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center">
-                <ArrowRight className="h-4 w-4" />
+                <ShieldCheck className="h-4 w-4" />
               </div>
-              <span>Free account creation</span>
+              <span>Admin-verified tenant identity</span>
             </div>
             <div className="flex items-center gap-3 text-primary-foreground/80">
               <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center">
                 <ArrowRight className="h-4 w-4" />
               </div>
-              <span>List or browse properties instantly</span>
+              <span>Verified landlord property listings</span>
             </div>
             <div className="flex items-center gap-3 text-primary-foreground/80">
               <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center">
                 <ArrowRight className="h-4 w-4" />
               </div>
-              <span>Secure, transparent agreements</span>
+              <span>Tamper-evident blockchain agreements</span>
             </div>
           </div>
         </div>
@@ -119,7 +201,7 @@ const Register = () => {
           className="w-full max-w-md"
         >
           <BackButton className="mb-4" />
-          
+
           <div className="lg:hidden mb-8">
             <Link to="/" className="flex items-center gap-2">
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-primary">
@@ -133,7 +215,7 @@ const Register = () => {
             <CardHeader className="space-y-1">
               <CardTitle className="text-2xl font-display">Create Account</CardTitle>
               <CardDescription>
-                Choose your role and fill in your details
+                Choose your role and enter your details
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -210,7 +292,7 @@ const Register = () => {
                     <Input
                       id="phone"
                       type="tel"
-                      placeholder="+1 (555) 000-0000"
+                      placeholder="+91 98765 43210"
                       value={phone}
                       onChange={(e) => setPhone(e.target.value)}
                       className="pl-10"
@@ -235,9 +317,68 @@ const Register = () => {
                   </div>
                 </div>
 
+                {/* Tenant Identity Document Upload Section */}
+                {role === "tenant" && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="space-y-3 pt-2 border-t border-border/50"
+                  >
+                    <div className="flex items-center justify-between">
+                      <Label className="flex items-center gap-1.5 font-medium">
+                        <FileText className="h-4 w-4 text-primary" />
+                        Identity Document Verification *
+                      </Label>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="docType" className="text-xs text-muted-foreground">Document Type</Label>
+                      <Select
+                        value={identityDocumentType}
+                        onValueChange={setIdentityDocumentType}
+                      >
+                        <SelectTrigger id="docType">
+                          <SelectValue placeholder="Select Document Type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {DOCUMENT_TYPES.map((type) => (
+                            <SelectItem key={type} value={type}>
+                              {type}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept=".pdf,.jpg,.jpeg,.png"
+                        onChange={handleFileChange}
+                        className="hidden"
+                        id="identity-doc-upload"
+                      />
+                      <div
+                        onClick={() => fileInputRef.current?.click()}
+                        className="border-2 border-dashed border-border rounded-lg p-4 text-center cursor-pointer hover:bg-muted/50 transition-colors"
+                      >
+                        <Upload className="mx-auto h-6 w-6 text-muted-foreground mb-1" />
+                        <p className="text-sm font-medium text-foreground">
+                          {identityDocumentFile ? identityDocumentFile.name : "Click to select document"}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          PDF, JPG, or PNG (Max 5 MB)
+                        </p>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+
                 <Button
                   type="submit"
-                  className="w-full bg-gradient-primary hover:opacity-90"
+                  className="w-full bg-gradient-primary hover:opacity-90 mt-2"
                   disabled={isLoading}
                 >
                   {isLoading ? (

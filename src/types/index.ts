@@ -6,6 +6,11 @@ export interface User {
   name: string;
   role: UserRole;
   status: 'pending' | 'approved' | 'rejected';
+  verificationStatus?: 'pending' | 'verified' | 'rejected';
+  identityDocument?: string;
+  identityDocumentName?: string;
+  identityDocumentType?: string;
+  rejectionReason?: string;
   avatar?: string;
   phone?: string;
   createdAt: string;
@@ -27,6 +32,9 @@ export interface Property {
   status: 'pending' | 'approved' | 'rejected';
   availability?: 'available' | 'rented';
   district?: string;
+  ownershipDocument?: string;
+  ownershipDocumentName?: string;
+  rejectionReason?: string;
   createdAt: string;
   bedrooms?: number;
   bathrooms?: number;
@@ -87,9 +95,10 @@ export interface NegotiationMessage {
 export interface AuthContextType {
   user: User | null;
   login: (email: string, password: string) => Promise<{ user: User }>;
-  register: (data: RegisterData) => Promise<void>;
+  register: (data: RegisterData | FormData) => Promise<void>;
   logout: () => void;
   isLoading: boolean;
+  refreshUser?: () => Promise<void>;
 }
 
 export interface RegisterData {
@@ -98,4 +107,6 @@ export interface RegisterData {
   password: string;
   role: UserRole;
   phone?: string;
+  identityDocumentType?: string;
+  identityDocument?: File;
 }

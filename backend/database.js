@@ -182,6 +182,34 @@ export function initDatabase() {
     // Column already exists, ignore
   }
 
+  // Add verification fields to users if they don't exist
+  try {
+    db.exec(`ALTER TABLE users ADD COLUMN verificationStatus TEXT DEFAULT 'pending'`);
+  } catch (e) {}
+  try {
+    db.exec(`ALTER TABLE users ADD COLUMN identityDocument TEXT`);
+  } catch (e) {}
+  try {
+    db.exec(`ALTER TABLE users ADD COLUMN identityDocumentName TEXT`);
+  } catch (e) {}
+  try {
+    db.exec(`ALTER TABLE users ADD COLUMN identityDocumentType TEXT DEFAULT 'Aadhaar Card'`);
+  } catch (e) {}
+  try {
+    db.exec(`ALTER TABLE users ADD COLUMN rejectionReason TEXT`);
+  } catch (e) {}
+
+  // Add ownership document fields to properties if they don't exist
+  try {
+    db.exec(`ALTER TABLE properties ADD COLUMN ownershipDocument TEXT`);
+  } catch (e) {}
+  try {
+    db.exec(`ALTER TABLE properties ADD COLUMN ownershipDocumentName TEXT`);
+  } catch (e) {}
+  try {
+    db.exec(`ALTER TABLE properties ADD COLUMN rejectionReason TEXT`);
+  } catch (e) {}
+
   // Agreements table
   db.exec(`
     CREATE TABLE IF NOT EXISTS agreements (

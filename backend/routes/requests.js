@@ -5,6 +5,7 @@ import PDFDocument from 'pdfkit';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { mkdirSync, existsSync, createWriteStream } from 'fs';
+import { generateProfessionalAgreementPDF } from '../utils/pdfGenerator.js';
 
 const router = express.Router();
 
@@ -25,37 +26,7 @@ function generateBlockchainHashForAgreement(agreementData) {
 
 // Generate PDF for agreement
 function generateAgreementPDF(agreement) {
-  return new Promise((resolve, reject) => {
-    const doc = new PDFDocument();
-    const filename = `agreement_${agreement.id}.pdf`;
-    const filepath = join(uploadsDir, filename);
-
-    const stream = createWriteStream(filepath);
-    doc.pipe(stream);
-
-    // PDF content
-    doc.fontSize(20).text('Rental Agreement', { align: 'center' });
-    doc.moveDown();
-    doc.fontSize(12);
-    doc.text(`Agreement ID: ${agreement.id}`);
-    doc.text(`Property: ${agreement.propertyTitle}`);
-    doc.text(`Tenant: ${agreement.tenantName}`);
-    doc.text(`Landlord: ${agreement.landlordName}`);
-    doc.moveDown();
-    doc.text(`Monthly Rent: ₹${agreement.finalRent.toLocaleString()}`);
-    doc.text(`Start Date: ${new Date(agreement.startDate).toLocaleDateString()}`);
-    doc.text(`End Date: ${new Date(agreement.endDate).toLocaleDateString()}`);
-    doc.moveDown();
-    doc.text(`Blockchain Hash: ${agreement.blockchainHash}`);
-    doc.text(`Timestamp: ${new Date(agreement.blockchainTimestamp).toLocaleString()}`);
-    doc.moveDown();
-    doc.text('This agreement has been finalized and stored on the blockchain.');
-    doc.text('The hash above serves as proof of the agreement\'s integrity.');
-
-    doc.end();
-    stream.on('finish', () => resolve(filename));
-    stream.on('error', reject);
-  });
+  return generateProfessionalAgreementPDF(agreement, uploadsDir);
 }
 
 // Generate blockchain hash (simple SHA-256)
@@ -66,46 +37,24 @@ function generateBlockchainHash(requestData) {
 
 // Generate PDF for accepted request
 function generateRequestPDF(request, landlord) {
-  return new Promise((resolve, reject) => {
-    const doc = new PDFDocument();
-    const filename = `request_${request.id}.pdf`;
-    const filepath = join(uploadsDir, filename);
+  const filename = `request_${request.id}.pdf`;
+  const tenantUser = db.prepare('SELECT email, phone FROM users WHERE id = ?').get(request.tenantId);
+  const landlordUser = db.prepare('SELECT email, phone FROM users WHERE id = ?').get(request.landlordId);
+  const property = db.prepare('SELECT location, district FROM properties WHERE id = ?').get(request.propertyId);
 
-    const stream = createWriteStream(filepath);
-    doc.pipe(stream);
+  const requestDataForPDF = {
+    ...request,
+    propertyLocation: property ? [property.location, property.district].filter(Boolean).join(', ') : '',
+    tenantEmail: tenantUser?.email,
+    tenantPhone: tenantUser?.phone,
+    landlordName: landlord?.name || request.landlordName,
+    landlordEmail: landlordUser?.email,
+    landlordPhone: landlordUser?.phone,
+    finalRent: request.finalRent || request.proposedRent || 0,
+    advanceAmount: request.advanceAmount || request.finalRent || 0,
+  };
 
-    // PDF content
-    doc.fontSize(20).text('Rental Request Agreement', { align: 'center' });
-    doc.moveDown();
-    doc.fontSize(12);
-    doc.text(`Request ID: ${request.id}`);
-    doc.text(`Property: ${request.propertyTitle}`);
-    doc.text(`Tenant: ${request.tenantName}`);
-    doc.text(`Landlord: ${landlord.name}`);
-    doc.moveDown();
-    doc.text(`Monthly Rent: ₹${request.finalRent.toLocaleString()}`);
-    doc.text(`Original Rent: ₹${request.originalRent.toLocaleString()}`);
-    doc.text(`Proposed Rent: ₹${request.proposedRent.toLocaleString()}`);
-    doc.moveDown();
-    if (request.message) {
-      doc.text(`Message: ${request.message}`);
-      doc.moveDown();
-    }
-    doc.text(`Status: ${request.status.toUpperCase()}`);
-    doc.text(`Created At: ${new Date(request.createdAt).toLocaleString()}`);
-    doc.moveDown();
-    if (request.blockchainHash) {
-      doc.text(`Blockchain Hash: ${request.blockchainHash}`);
-      doc.text(`Blockchain Timestamp: ${new Date(request.blockchainTimestamp).toLocaleString()}`);
-      doc.moveDown();
-      doc.text('This request has been accepted and stored on the blockchain.');
-      doc.text('The hash above serves as proof of the request\'s integrity.');
-    }
-
-    doc.end();
-    stream.on('finish', () => resolve(filename));
-    stream.on('error', reject);
-  });
+  return generateProfessionalAgreementPDF(requestDataForPDF, uploadsDir, filename);
 }
 
 // Simple auth helper (mock - no JWT)
@@ -122,10 +71,16 @@ router.post('/', (req, res) => {
       return res.status(401).json({ error: 'Authentication required' });
     }
 
-    // Check if user is tenant
-    const user = db.prepare('SELECT role, name FROM users WHERE id = ?').get(userId);
+    // Check if user is tenant and verified
+    const user = db.prepare('SELECT role, name, verificationStatus FROM users WHERE id = ?').get(userId);
     if (!user || user.role !== 'tenant') {
       return res.status(403).json({ error: 'Only tenants can create rental requests' });
+    }
+
+    if (user.verificationStatus !== 'verified') {
+      return res.status(403).json({
+        error: `Tenant identity verification required before submitting rental requests. Your verification status is ${user.verificationStatus || 'pending'}.`
+      });
     }
 
     const { propertyId, proposedRent, message } = req.body;
@@ -138,6 +93,13 @@ router.post('/', (req, res) => {
     const property = db.prepare('SELECT * FROM properties WHERE id = ?').get(propertyId);
     if (!property) {
       return res.status(404).json({ error: 'Property not found' });
+    }
+
+    // Check if property is approved
+    if (property.status !== 'approved') {
+      return res.status(403).json({
+        error: 'Rental requests can only be submitted for approved properties.'
+      });
     }
 
     // Check if property is available
@@ -419,6 +381,14 @@ router.patch('/:id/confirm', async (req, res) => {
       return res.status(403).json({ error: 'Only the tenant can confirm counter-offers' });
     }
 
+    // Check if tenant is identity-verified
+    const tenantUser = db.prepare('SELECT verificationStatus FROM users WHERE id = ?').get(userId);
+    if (!tenantUser || tenantUser.verificationStatus !== 'verified') {
+      return res.status(403).json({
+        error: `Tenant identity verification required before accepting counter-offers. Current status: ${tenantUser?.verificationStatus || 'pending'}.`
+      });
+    }
+
     // Check if request is in countered state
     if (request.status !== 'countered') {
       return res.status(400).json({ error: 'Request is not in countered state' });
@@ -523,6 +493,14 @@ router.post('/:id/pay', async (req, res) => {
       return res.status(403).json({ error: 'Only the tenant can make payments' });
     }
 
+    // Check if tenant is identity-verified
+    const tenantUser = db.prepare('SELECT verificationStatus FROM users WHERE id = ?').get(userId);
+    if (!tenantUser || tenantUser.verificationStatus !== 'verified') {
+      return res.status(403).json({
+        error: `Tenant identity verification required before making payments. Current status: ${tenantUser?.verificationStatus || 'pending'}.`
+      });
+    }
+
     // Check status
     if (request.status !== 'approved') {
       return res.status(400).json({ error: 'Request is not approved for payment' });
@@ -602,15 +580,26 @@ router.post('/:id/pay', async (req, res) => {
 
       // Agreement PDF
       try {
+        const tenantUser = db.prepare('SELECT email, phone FROM users WHERE id = ?').get(request.tenantId);
+        const landlordUser = db.prepare('SELECT email, phone FROM users WHERE id = ?').get(request.landlordId);
+        const property = db.prepare('SELECT location, district FROM properties WHERE id = ?').get(request.propertyId);
+
         const agreementForPDF = {
           id: agreementId,
           propertyId: request.propertyId,
           propertyTitle: request.propertyTitle,
+          propertyLocation: property ? [property.location, property.district].filter(Boolean).join(', ') : '',
           tenantId: request.tenantId,
           tenantName: request.tenantName,
+          tenantEmail: tenantUser?.email,
+          tenantPhone: tenantUser?.phone,
           landlordId: request.landlordId,
           landlordName: landlord.name,
+          landlordEmail: landlordUser?.email,
+          landlordPhone: landlordUser?.phone,
           finalRent,
+          amountPaid: request.advanceAmount || finalRent,
+          transactionHash: req.body?.transactionHash || null,
           startDate,
           endDate: endDateISO,
           blockchainHash: agreementBlockchainHash,
