@@ -39,6 +39,10 @@ router.post('/login', (req, res) => {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
+    if (user.isDeleted === 1 || user.isActive === 0) {
+      return res.status(403).json({ error: 'This account has been deactivated. Please contact administrator.' });
+    }
+
     res.json({
       user: sanitizeUser(user),
       message: 'Login successful'
@@ -74,10 +78,13 @@ router.post('/register', (req, res) => {
       }
 
       // Check if user already exists
-      const existingUser = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
+      const existingUser = db.prepare('SELECT id, isDeleted, isActive FROM users WHERE email = ?').get(email);
       if (existingUser) {
         if (req.file && fs.existsSync(req.file.path)) {
           fs.unlinkSync(req.file.path);
+        }
+        if (existingUser.isDeleted === 1 || existingUser.isActive === 0) {
+          return res.status(400).json({ error: 'An account with this email was previously deactivated. Please contact administrator.' });
         }
         return res.status(400).json({ error: 'User with this email already exists' });
       }
@@ -180,6 +187,11 @@ router.post('/resubmit-identity', (req, res) => {
         return res.status(404).json({ error: 'User not found' });
       }
 
+      if (user.isDeleted === 1 || user.isActive === 0) {
+        if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+        return res.status(403).json({ error: 'This account has been deactivated.' });
+      }
+
       if (user.role !== 'tenant') {
         if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
         return res.status(403).json({ error: 'Only tenants can submit identity documents' });
@@ -254,6 +266,10 @@ router.get('/profile', (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
+    if (user.isDeleted === 1 || user.isActive === 0) {
+      return res.status(403).json({ error: 'This account has been deactivated.' });
+    }
+
     res.json({ user: sanitizeUser(user) });
   } catch (error) {
     console.error('Profile error:', error);
@@ -266,6 +282,12 @@ router.put('/profile', (req, res) => {
   try {
     const userId = getUserIdFromRequest(req);
     if (!userId) return res.status(401).json({ error: 'Authentication required' });
+
+    const existing = db.prepare('SELECT isDeleted, isActive FROM users WHERE id = ?').get(userId);
+    if (!existing) return res.status(404).json({ error: 'User not found' });
+    if (existing.isDeleted === 1 || existing.isActive === 0) {
+      return res.status(403).json({ error: 'This account has been deactivated.' });
+    }
 
     const { name, phone } = req.body;
 
@@ -290,13 +312,11 @@ router.put('/change-password', (req, res) => {
     const userId = getUserIdFromRequest(req);
     if (!userId) return res.status(401).json({ error: 'Authentication required' });
 
-    const { oldPassword, newPassword } = req.body;
-
-    if (!oldPassword || !newPassword) {
-      return res.status(400).json({ error: 'Old and new passwords are required' });
-    }
-
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (user.isDeleted === 1 || user.isActive === 0) {
+      return res.status(403).json({ error: 'This account has been deactivated.' });
+    }
     const hashedOldPassword = crypto.createHash('sha256').update(oldPassword).digest('hex');
 
     if (user.password !== hashedOldPassword) {

@@ -199,6 +199,17 @@ export function initDatabase() {
     db.exec(`ALTER TABLE users ADD COLUMN rejectionReason TEXT`);
   } catch (e) {}
 
+  // Add soft-delete and deactivation fields to users if they don't exist
+  try {
+    db.exec(`ALTER TABLE users ADD COLUMN isDeleted INTEGER DEFAULT 0`);
+  } catch (e) {}
+  try {
+    db.exec(`ALTER TABLE users ADD COLUMN deletedAt TEXT`);
+  } catch (e) {}
+  try {
+    db.exec(`ALTER TABLE users ADD COLUMN isActive INTEGER DEFAULT 1`);
+  } catch (e) {}
+
   // Add ownership document fields to properties if they don't exist
   try {
     db.exec(`ALTER TABLE properties ADD COLUMN ownershipDocument TEXT`);
@@ -208,6 +219,17 @@ export function initDatabase() {
   } catch (e) {}
   try {
     db.exec(`ALTER TABLE properties ADD COLUMN rejectionReason TEXT`);
+  } catch (e) {}
+
+  // Add soft-delete and deactivation fields to properties if they don't exist
+  try {
+    db.exec(`ALTER TABLE properties ADD COLUMN isDeleted INTEGER DEFAULT 0`);
+  } catch (e) {}
+  try {
+    db.exec(`ALTER TABLE properties ADD COLUMN deletedAt TEXT`);
+  } catch (e) {}
+  try {
+    db.exec(`ALTER TABLE properties ADD COLUMN isActive INTEGER DEFAULT 1`);
   } catch (e) {}
 
   // Agreements table

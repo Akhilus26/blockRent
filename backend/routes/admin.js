@@ -1,11 +1,16 @@
 import express from 'express';
 import fs from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 import db from '../database.js';
 import {
   getSafeFilePath,
   SECURE_IDENTITY_DIR,
   SECURE_OWNERSHIP_DIR
 } from '../utils/fileSecurity.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const router = express.Router();
 
@@ -107,7 +112,14 @@ router.get('/users', (req, res) => {
       return res.status(403).json({ error: 'Admin access required' });
     }
 
-    const users = db.prepare('SELECT * FROM users ORDER BY createdAt DESC').all();
+    const { includeDeleted } = req.query;
+    let query = 'SELECT * FROM users';
+    if (includeDeleted !== 'true') {
+      query += ' WHERE (isDeleted IS NULL OR isDeleted = 0)';
+    }
+    query += ' ORDER BY createdAt DESC';
+
+    const users = db.prepare(query).all();
 
     // Remove passwords from response
     const usersWithoutPasswords = users.map(u => {
@@ -214,16 +226,24 @@ router.get('/properties', (req, res) => {
       return res.status(403).json({ error: 'Admin access required' });
     }
 
-    const { status } = req.query;
+    const { status, includeDeleted } = req.query;
     let query = `
       SELECT p.*, u.email as landlordEmail, u.phone as landlordPhone 
       FROM properties p
       LEFT JOIN users u ON p.landlordId = u.id
     `;
+    const conditions = [];
     const params = [];
+
+    if (includeDeleted !== 'true') {
+      conditions.push('(p.isDeleted IS NULL OR p.isDeleted = 0)');
+    }
     if (status) {
-      query += ' WHERE p.status = ?';
+      conditions.push('p.status = ?');
       params.push(status);
+    }
+    if (conditions.length > 0) {
+      query += ' WHERE ' + conditions.join(' AND ');
     }
     query += ' ORDER BY p.createdAt DESC';
 
