@@ -207,11 +207,11 @@ const AdminUsers = () => {
     }
 
     try {
-      await adminAPI.deleteUser(userId);
+      const res = await adminAPI.deleteUser(userId);
       setUsers((prev) => prev.filter((u) => u.id !== userId));
       toast({
-        title: "User deleted",
-        description: "The user account has been permanently deleted.",
+        title: (res as any)?.softDeleted ? "User Deactivated" : "User Deleted",
+        description: (res as any)?.message || "The user account has been processed successfully.",
       });
     } catch (error: any) {
       console.error('Error deleting user:', error);

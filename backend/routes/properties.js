@@ -137,6 +137,12 @@ router.get('/', (req, res) => {
     // Only show available properties (not rented) when browsing
     conditions.push("(availability IS NULL OR availability = 'available')");
 
+    // Exclude soft-deleted or deactivated properties
+    conditions.push('(isDeleted IS NULL OR isDeleted = 0)');
+    conditions.push('(isActive IS NULL OR isActive = 1)');
+    // Exclude properties belonging to deactivated landlords
+    conditions.push('landlordId NOT IN (SELECT id FROM users WHERE isDeleted = 1 OR isActive = 0)');
+
     if (conditions.length > 0) {
       query += ' WHERE ' + conditions.join(' AND ');
     }
@@ -209,6 +215,13 @@ router.get('/:id', (req, res) => {
       return res.status(404).json({ error: 'Property not found' });
     }
 
+    // Check if property is soft-deleted / deactivated
+    if (property.isDeleted === 1 || property.isActive === 0) {
+      if (!isAdmin) {
+        return res.status(404).json({ error: 'Property not found or is no longer active' });
+      }
+    }
+
     // Security check: If property is not approved, only the owning landlord or an admin can access it!
     if (property.status !== 'approved') {
       const isOwner = userId && property.landlordId === userId;
@@ -271,9 +284,12 @@ router.post('/', (req, res) => {
     }
 
     // Check if user is landlord or admin
-    const user = db.prepare('SELECT role, name FROM users WHERE id = ?').get(userId);
+    const user = db.prepare('SELECT role, name, isDeleted, isActive FROM users WHERE id = ?').get(userId);
     if (!user || (user.role !== 'landlord' && user.role !== 'admin')) {
       return res.status(403).json({ error: 'Only landlords can create properties' });
+    }
+    if (user.isDeleted === 1 || user.isActive === 0) {
+      return res.status(403).json({ error: 'Deactivated accounts cannot create properties' });
     }
 
     const {
@@ -381,7 +397,7 @@ router.get('/landlord/:landlordId', (req, res) => {
     }
 
     const properties = db.prepare(
-      'SELECT * FROM properties WHERE landlordId = ? ORDER BY createdAt DESC'
+      'SELECT * FROM properties WHERE landlordId = ? AND (isDeleted IS NULL OR isDeleted = 0) ORDER BY createdAt DESC'
     ).all(landlordId);
 
     const formattedProperties = properties.map(prop => ({
@@ -416,7 +432,15 @@ router.put('/:id', (req, res) => {
       return res.status(404).json({ error: 'Property not found' });
     }
 
-    const user = db.prepare('SELECT role FROM users WHERE id = ?').get(userId);
+    if (property.isDeleted === 1 || property.isActive === 0) {
+      return res.status(403).json({ error: 'Cannot update a deactivated property' });
+    }
+
+    const user = db.prepare('SELECT role, isDeleted, isActive FROM users WHERE id = ?').get(userId);
+    if (!user || user.isDeleted === 1 || user.isActive === 0) {
+      return res.status(403).json({ error: 'Deactivated account cannot update properties' });
+    }
+
     if (property.landlordId !== userId && (!user || user.role !== 'admin')) {
       return res.status(403).json({ error: 'Not authorized to update this property' });
     }
@@ -581,39 +605,83 @@ router.delete('/:id', (req, res) => {
       return res.status(403).json({ error: 'Not authorized to delete this property' });
     }
 
-    // Delete associated image files
-    try {
-      const images = JSON.parse(property.images || '[]');
-      images.forEach((imagePath) => {
-        if (imagePath && imagePath.startsWith('/uploads/')) {
-          const filePath = join(__dirname, '..', imagePath);
-          if (fs.existsSync(filePath)) {
-            fs.unlinkSync(filePath);
-          }
+    // Check related records referencing this property
+    const agreementsCount = db.prepare(
+      'SELECT COUNT(*) as count FROM agreements WHERE propertyId = ?'
+    ).get(id).count;
+
+    const requestsCount = db.prepare(
+      'SELECT COUNT(*) as count FROM rental_requests WHERE propertyId = ?'
+    ).get(id).count;
+
+    const totalRelations = agreementsCount + requestsCount;
+
+    // If caller explicitly requested permanent deletion but related records exist, return clear 409
+    if (req.query.permanent === 'true' && totalRelations > 0) {
+      return res.status(409).json({
+        error: 'Cannot permanently delete property because related rental agreements or requests exist. Property must be deactivated to preserve transaction records.',
+        hasRelatedRecords: true,
+        records: {
+          agreements: agreementsCount,
+          requests: requestsCount
         }
       });
-    } catch (err) {
-      console.error('Error deleting image files:', err);
     }
 
-    // Delete secure ownership document
-    if (property.ownershipDocument) {
-      const docPath = getSafeFilePath(SECURE_OWNERSHIP_DIR, property.ownershipDocument);
-      if (docPath && fs.existsSync(docPath)) {
-        try {
-          fs.unlinkSync(docPath);
-        } catch (err) {
-          console.error('Error deleting ownership doc:', err);
+    // Case A: Safe for permanent deletion (no rental requests or agreements exist)
+    if (totalRelations === 0) {
+      // Delete associated image files
+      try {
+        const images = JSON.parse(property.images || '[]');
+        images.forEach((imagePath) => {
+          if (imagePath && imagePath.startsWith('/uploads/')) {
+            const filePath = join(__dirname, '..', imagePath);
+            if (fs.existsSync(filePath)) {
+              fs.unlinkSync(filePath);
+            }
+          }
+        });
+      } catch (err) {
+        console.error('Error deleting image files:', err);
+      }
+
+      // Delete secure ownership document
+      if (property.ownershipDocument) {
+        const docPath = getSafeFilePath(SECURE_OWNERSHIP_DIR, property.ownershipDocument);
+        if (docPath && fs.existsSync(docPath)) {
+          try {
+            fs.unlinkSync(docPath);
+          } catch (err) {
+            console.error('Error deleting ownership doc:', err);
+          }
         }
       }
+
+      db.prepare('DELETE FROM properties WHERE id = ?').run(id);
+
+      return res.json({ 
+        message: 'Property permanently deleted successfully',
+        permanent: true 
+      });
     }
 
-    db.prepare('DELETE FROM properties WHERE id = ?').run(id);
+    // Case B: Has related records - soft delete / deactivate to preserve agreements and blockchain records
+    db.prepare(`
+      UPDATE properties 
+      SET isDeleted = 1,
+          isActive = 0,
+          deletedAt = datetime('now')
+      WHERE id = ?
+    `).run(id);
 
-    res.json({ message: 'Property deleted successfully' });
+    return res.json({
+      message: 'Property has associated rental history. It has been safely deactivated to preserve agreement and blockchain records.',
+      softDeleted: true,
+      deactivated: true
+    });
   } catch (error) {
     console.error('Delete property error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Internal server error', details: error.message });
   }
 });
 

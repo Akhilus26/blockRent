@@ -72,9 +72,13 @@ router.post('/', (req, res) => {
     }
 
     // Check if user is tenant and verified
-    const user = db.prepare('SELECT role, name, verificationStatus FROM users WHERE id = ?').get(userId);
+    const user = db.prepare('SELECT role, name, verificationStatus, isDeleted, isActive FROM users WHERE id = ?').get(userId);
     if (!user || user.role !== 'tenant') {
       return res.status(403).json({ error: 'Only tenants can create rental requests' });
+    }
+
+    if (user.isDeleted === 1 || user.isActive === 0) {
+      return res.status(403).json({ error: 'Your account is deactivated and cannot submit rental requests.' });
     }
 
     if (user.verificationStatus !== 'verified') {
@@ -93,6 +97,10 @@ router.post('/', (req, res) => {
     const property = db.prepare('SELECT * FROM properties WHERE id = ?').get(propertyId);
     if (!property) {
       return res.status(404).json({ error: 'Property not found' });
+    }
+
+    if (property.isDeleted === 1 || property.isActive === 0) {
+      return res.status(400).json({ error: 'This property has been deactivated and is no longer accepting requests.' });
     }
 
     // Check if property is approved
@@ -257,9 +265,12 @@ router.patch('/:id/respond', async (req, res) => {
     }
 
     // Get landlord info
-    const landlord = db.prepare('SELECT name FROM users WHERE id = ?').get(userId);
+    const landlord = db.prepare('SELECT name, isDeleted, isActive FROM users WHERE id = ?').get(userId);
     if (!landlord) {
       return res.status(404).json({ error: 'Landlord not found' });
+    }
+    if (landlord.isDeleted === 1 || landlord.isActive === 0) {
+      return res.status(403).json({ error: 'Your account is deactivated.' });
     }
 
     let newStatus;
@@ -283,8 +294,8 @@ router.patch('/:id/respond', async (req, res) => {
         db.prepare('UPDATE rental_requests SET advanceAmount = ?, approvalTimestamp = ? WHERE id = ?')
           .run(finalRent, blockchainTimestamp, id);
 
-        // LOCK PROPERTY: Set availability to 'pending_payment'
-        db.prepare("UPDATE properties SET availability = 'pending_payment' WHERE id = ?").run(request.propertyId);
+        // LOCK PROPERTY: Set availability to 'rented'
+        db.prepare("UPDATE properties SET availability = 'rented' WHERE id = ?").run(request.propertyId);
 
         // CANCEL OTHERS: Reject all other pending/countered requests for this property
         db.prepare(`
@@ -381,12 +392,16 @@ router.patch('/:id/confirm', async (req, res) => {
       return res.status(403).json({ error: 'Only the tenant can confirm counter-offers' });
     }
 
-    // Check if tenant is identity-verified
-    const tenantUser = db.prepare('SELECT verificationStatus FROM users WHERE id = ?').get(userId);
+    // Check if tenant is identity-verified and active
+    const tenantUser = db.prepare('SELECT verificationStatus, isDeleted, isActive FROM users WHERE id = ?').get(userId);
     if (!tenantUser || tenantUser.verificationStatus !== 'verified') {
       return res.status(403).json({
         error: `Tenant identity verification required before accepting counter-offers. Current status: ${tenantUser?.verificationStatus || 'pending'}.`
       });
+    }
+
+    if (tenantUser.isDeleted === 1 || tenantUser.isActive === 0) {
+      return res.status(403).json({ error: 'Your account is deactivated.' });
     }
 
     // Check if request is in countered state
@@ -420,8 +435,8 @@ router.patch('/:id/confirm', async (req, res) => {
         db.prepare('UPDATE rental_requests SET advanceAmount = ?, approvalTimestamp = ? WHERE id = ?')
           .run(finalRent, blockchainTimestamp, id);
 
-        // LOCK PROPERTY: Set availability to 'pending_payment'
-        db.prepare("UPDATE properties SET availability = 'pending_payment' WHERE id = ?").run(request.propertyId);
+        // LOCK PROPERTY: Set availability to 'rented'
+        db.prepare("UPDATE properties SET availability = 'rented' WHERE id = ?").run(request.propertyId);
 
         // CANCEL OTHERS: Reject all other pending/countered requests for this property
         db.prepare(`
@@ -493,12 +508,16 @@ router.post('/:id/pay', async (req, res) => {
       return res.status(403).json({ error: 'Only the tenant can make payments' });
     }
 
-    // Check if tenant is identity-verified
-    const tenantUser = db.prepare('SELECT verificationStatus FROM users WHERE id = ?').get(userId);
+    // Check if tenant is identity-verified and active
+    const tenantUser = db.prepare('SELECT verificationStatus, isDeleted, isActive FROM users WHERE id = ?').get(userId);
     if (!tenantUser || tenantUser.verificationStatus !== 'verified') {
       return res.status(403).json({
         error: `Tenant identity verification required before making payments. Current status: ${tenantUser?.verificationStatus || 'pending'}.`
       });
+    }
+
+    if (tenantUser.isDeleted === 1 || tenantUser.isActive === 0) {
+      return res.status(403).json({ error: 'Your account is deactivated.' });
     }
 
     // Check status

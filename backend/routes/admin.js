@@ -507,7 +507,6 @@ router.delete('/users/:id', (req, res) => {
         UPDATE properties 
         SET isDeleted = 1,
             isActive = 0,
-            availability = 'unavailable',
             deletedAt = datetime('now')
         WHERE landlordId = ?
       `).run(id);

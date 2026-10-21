@@ -259,11 +259,11 @@ const LandlordDashboard = () => {
                                 onClick={async () => {
                                   if (window.confirm('Are you sure you want to delete this property?')) {
                                     try {
-                                      await propertyAPI.delete(property.id);
+                                      const res = await propertyAPI.delete(property.id);
                                       setMyProperties(prev => prev.filter(p => p.id !== property.id));
                                       toast({
-                                        title: "Property deleted",
-                                        description: "The property has been deleted successfully.",
+                                        title: (res as any)?.softDeleted ? "Property Deactivated" : "Property Deleted",
+                                        description: (res as any)?.message || "The property has been deleted successfully.",
                                       });
                                     } catch (error: any) {
                                       toast({

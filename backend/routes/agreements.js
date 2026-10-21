@@ -60,9 +60,13 @@ router.post('/finalize', async (req, res) => {
     }
 
     // Check if user is tenant or landlord
-    const user = db.prepare('SELECT role, name, verificationStatus FROM users WHERE id = ?').get(userId);
+    const user = db.prepare('SELECT role, name, verificationStatus, isDeleted, isActive FROM users WHERE id = ?').get(userId);
     if (!user || (user.role !== 'tenant' && user.role !== 'landlord')) {
       return res.status(403).json({ error: 'Only tenant or landlord can finalize agreements' });
+    }
+
+    if (user.isDeleted === 1 || user.isActive === 0) {
+      return res.status(403).json({ error: 'Your account is deactivated.' });
     }
 
     if (user.role === 'tenant' && user.verificationStatus !== 'verified') {

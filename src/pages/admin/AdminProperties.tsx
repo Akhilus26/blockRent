@@ -191,11 +191,11 @@ const AdminProperties = () => {
     }
 
     try {
-      await propertyAPI.delete(propertyId);
+      const res = await propertyAPI.delete(propertyId);
       setProperties((prev) => prev.filter((p) => p.id !== propertyId));
       toast({
-        title: "Property deleted",
-        description: "The property has been permanently deleted.",
+        title: (res as any)?.softDeleted ? "Property Deactivated" : "Property Deleted",
+        description: (res as any)?.message || "The property has been processed successfully.",
       });
     } catch (error: any) {
       console.error('Error deleting property:', error);
