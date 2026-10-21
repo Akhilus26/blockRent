@@ -350,14 +350,14 @@ router.get('/stats', (req, res) => {
       return res.status(403).json({ error: 'Admin access required' });
     }
 
-    const totalUsers = db.prepare('SELECT COUNT(*) as count FROM users').get().count;
-    const pendingTenants = db.prepare("SELECT COUNT(*) as count FROM users WHERE role = 'tenant' AND verificationStatus = 'pending'").get().count;
-    const verifiedTenants = db.prepare("SELECT COUNT(*) as count FROM users WHERE role = 'tenant' AND verificationStatus = 'verified'").get().count;
-    const totalProperties = db.prepare('SELECT COUNT(*) as count FROM properties').get().count;
-    const pendingProperties = db.prepare("SELECT COUNT(*) as count FROM properties WHERE status = 'pending'").get().count;
-    const approvedProperties = db.prepare("SELECT COUNT(*) as count FROM properties WHERE status = 'approved'").get().count;
+    const totalUsers = db.prepare('SELECT COUNT(*) as count FROM users WHERE (isDeleted IS NULL OR isDeleted = 0)').get().count;
+    const pendingTenants = db.prepare("SELECT COUNT(*) as count FROM users WHERE role = 'tenant' AND verificationStatus = 'pending' AND (isDeleted IS NULL OR isDeleted = 0)").get().count;
+    const verifiedTenants = db.prepare("SELECT COUNT(*) as count FROM users WHERE role = 'tenant' AND verificationStatus = 'verified' AND (isDeleted IS NULL OR isDeleted = 0)").get().count;
+    const totalProperties = db.prepare('SELECT COUNT(*) as count FROM properties WHERE (isDeleted IS NULL OR isDeleted = 0)').get().count;
+    const pendingProperties = db.prepare("SELECT COUNT(*) as count FROM properties WHERE status = 'pending' AND (isDeleted IS NULL OR isDeleted = 0)").get().count;
+    const approvedProperties = db.prepare("SELECT COUNT(*) as count FROM properties WHERE status = 'approved' AND (isDeleted IS NULL OR isDeleted = 0)").get().count;
     const totalAgreements = db.prepare('SELECT COUNT(*) as count FROM agreements').get().count;
-    const rentedProperties = db.prepare("SELECT COUNT(*) as count FROM properties WHERE availability = 'rented'").get().count;
+    const rentedProperties = db.prepare("SELECT COUNT(*) as count FROM properties WHERE availability = 'rented' AND (isDeleted IS NULL OR isDeleted = 0)").get().count;
 
     res.json({
       stats: {
@@ -403,20 +403,124 @@ router.delete('/users/:id', (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    // Delete secure identity file if exists
-    if (user.identityDocument) {
-      const docPath = getSafeFilePath(SECURE_IDENTITY_DIR, user.identityDocument);
-      if (docPath && fs.existsSync(docPath)) {
-        try { fs.unlinkSync(docPath); } catch (e) {}
-      }
+    // Check related records referencing this user
+    const directAgreements = db.prepare(
+      'SELECT COUNT(*) as count FROM agreements WHERE tenantId = ? OR landlordId = ?'
+    ).get(id, id).count;
+
+    const directRequests = db.prepare(
+      'SELECT COUNT(*) as count FROM rental_requests WHERE tenantId = ? OR landlordId = ?'
+    ).get(id, id).count;
+
+    const landlordProperties = db.prepare(
+      'SELECT id, images, ownershipDocument FROM properties WHERE landlordId = ?'
+    ).all(id);
+
+    let propRequestsCount = 0;
+    let propAgreementsCount = 0;
+    if (landlordProperties.length > 0) {
+      propRequestsCount = db.prepare(`
+        SELECT COUNT(*) as count 
+        FROM rental_requests r
+        JOIN properties p ON r.propertyId = p.id
+        WHERE p.landlordId = ?
+      `).get(id).count;
+
+      propAgreementsCount = db.prepare(`
+        SELECT COUNT(*) as count 
+        FROM agreements a
+        JOIN properties p ON a.propertyId = p.id
+        WHERE p.landlordId = ?
+      `).get(id).count;
     }
 
-    db.prepare('DELETE FROM users WHERE id = ?').run(id);
+    const totalRelations = directAgreements + directRequests + propRequestsCount + propAgreementsCount;
 
-    res.json({ message: 'User deleted successfully' });
+    // If caller explicitly requested permanent deletion but related records exist, return clear 409
+    if (req.query.permanent === 'true' && totalRelations > 0) {
+      return res.status(409).json({
+        error: 'Cannot permanently delete user because related rental agreements, requests, or property transaction history exist. User account can only be deactivated to preserve legal and blockchain audit records.',
+        hasRelatedRecords: true,
+        counts: {
+          agreements: directAgreements + propAgreementsCount,
+          requests: directRequests + propRequestsCount,
+          properties: landlordProperties.length
+        }
+      });
+    }
+
+    // Case A: Safe for permanent deletion (no rental requests or agreements exist anywhere)
+    if (totalRelations === 0) {
+      // If landlord had properties without any rental history, safely remove files and delete them
+      if (landlordProperties.length > 0) {
+        for (const prop of landlordProperties) {
+          try {
+            const images = JSON.parse(prop.images || '[]');
+            images.forEach((img) => {
+              if (img && img.startsWith('/uploads/')) {
+                const imgPath = join(__dirname, '..', img);
+                if (fs.existsSync(imgPath)) {
+                  try { fs.unlinkSync(imgPath); } catch (e) {}
+                }
+              }
+            });
+          } catch (e) {}
+
+          if (prop.ownershipDocument) {
+            const docPath = getSafeFilePath(SECURE_OWNERSHIP_DIR, prop.ownershipDocument);
+            if (docPath && fs.existsSync(docPath)) {
+              try { fs.unlinkSync(docPath); } catch (e) {}
+            }
+          }
+        }
+        db.prepare('DELETE FROM properties WHERE landlordId = ?').run(id);
+      }
+
+      // Delete secure identity file if exists
+      if (user.identityDocument) {
+        const docPath = getSafeFilePath(SECURE_IDENTITY_DIR, user.identityDocument);
+        if (docPath && fs.existsSync(docPath)) {
+          try { fs.unlinkSync(docPath); } catch (e) {}
+        }
+      }
+
+      db.prepare('DELETE FROM users WHERE id = ?').run(id);
+
+      return res.json({ 
+        message: 'User permanently deleted successfully',
+        permanent: true 
+      });
+    }
+
+    // Case B: Has related records - perform safe soft deletion / deactivation to preserve blockchain and legal records
+    db.prepare(`
+      UPDATE users 
+      SET isDeleted = 1,
+          isActive = 0,
+          deletedAt = datetime('now')
+      WHERE id = ?
+    `).run(id);
+
+    // If landlord, deactivate all their listings so they vanish from search and listings
+    if (landlordProperties.length > 0) {
+      db.prepare(`
+        UPDATE properties 
+        SET isDeleted = 1,
+            isActive = 0,
+            availability = 'unavailable',
+            deletedAt = datetime('now')
+        WHERE landlordId = ?
+      `).run(id);
+    }
+
+    return res.json({
+      message: 'User has associated rental history. The account has been safely deactivated to preserve agreement and blockchain records.',
+      softDeleted: true,
+      deactivated: true
+    });
   } catch (error) {
     console.error('Delete user error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Internal server error', details: error.message });
   }
 });
 
